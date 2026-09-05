@@ -26,14 +26,19 @@ optimized disk I/O.
 Ensure you have a recent Rust toolchain installed:
 
 ```bash
-git clone [https://github.com/robitex/tlx.git](https://github.com/robitex/tlx.git)
+git clone https://github.com/robitex/tlx.git
 cd tlx
 cargo build --release
 ```
 
 ## Usage
 
-Simply run the executable. At the moment, `tlx` installs only a scheme-full TeX Live and
+Simply run the executable with the following command:
+```bash
+cargo run --release
+```
+
+Please note: at the moment, `tlx` installs only the scheme-full of TeX Live and
 works only on Windows as it is at an early stage of development.
 
 ## License
