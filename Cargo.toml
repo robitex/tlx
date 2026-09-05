@@ -1,0 +1,45 @@
+[package]
+name = "tlx"
+version = "0.1.0"
+edition = "2024"
+
+# Titolo esteso e descrizione del programma
+description = "tlx — TeX Live eXpress: Fast & Secure TeX Live Installer in Pure Rust"
+
+# Altri metadati utili per la presentazione 
+repository = "https://github.com/robitex/tlx"
+keywords = ["texlive", "installer", "latex", "tex"]
+categories = ["command-line-utilities", "installer"]
+
+[dependencies]
+ahash = "0.8.12"
+
+# verify gpg signature on files
+pgp = "0.20"
+
+# Client HTTP with TLS in pure Rust
+reqwest = { version = "0.13", features = ["stream", "http2", "json"] }
+
+# Hash and Hex (pure Rust)
+sha2 = "0.11"
+hex = "0.4"
+
+# Decompression XZ / LZMA in PURE RUST
+lzma-rs = "0.3"
+
+# Extracting TAR in PURE RUST
+tar = "0.4"
+
+# Runtime asyncronous
+tokio = { version = "1.38", features = ["full"] }
+bytes = "1.6"
+async-channel = "2.5.0"
+
+dunce = "1.0"
+
+[profile.release]
+opt-level = 3       # Ottimizza aggressivamente per la velocità
+lto = true          # Link-Time Optimization: elimina codice morto tra tutti i crate
+codegen-units = 1   # Riduce il parallelismo di compilazione per permettere a LLVM di ottimizzare meglio
+panic = "abort"     # Rimuove la logica di unwinding dello stack in caso di panico
+strip = true        # Rimuove tutti i simboli di debug dalla build finale

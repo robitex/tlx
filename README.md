@@ -1,0 +1,42 @@
+# TeX Live eXpress (tlx)
+
+**tlx** is a high-performance alternative installer for **TeX Live**, written in Rust.
+
+It is designed to drastically reduce the time required to install and set up TeX Live
+distributions by leveraging parallel network downloads, fast decompression pipelines, and
+optimized disk I/O.
+
+## Key Features
+
+- **Parallel Downloads**: Concurrent package fetching via `tokio` and `reqwest` to fully
+  saturate available bandwidth.
+- **Accelerated Decompression**: Native LZMA/XZ package extraction optimized for multi-core
+  processors.
+- **Security Verification**: Automated integrity checks and PGP signature verification for 
+  TeX Live repositories.
+- **Fast `ls-R` Generation**: Automatic and high-speed TeX file database generation upon
+  installation completion.
+- **Lightweight & Standalone**: Clean, modular CLI binary with no heavy external
+  dependencies.
+
+## Installation
+
+### Building from Source (requires Rust)
+
+Ensure you have a recent Rust toolchain installed:
+
+```bash
+git clone [https://github.com/robitex/tlx.git](https://github.com/robitex/tlx.git)
+cd tlx
+cargo build --release
+```
+
+## Usage
+
+Simply run the executable. At the moment, `tlx` installs only a scheme-full TeX Live and
+works only on Windows as it is at an early stage of development.
+
+## License
+
+This project is licensed under the **Mozilla Public License 2.0 (MPL-2.0)**. See the
+[LICENSE](LICENSE) file for details.
