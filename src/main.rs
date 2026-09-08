@@ -18,16 +18,15 @@ mod networking {
 }
 
 mod execute {
+    pub mod addformat;
+    pub mod addhyphen;
     pub mod command;
-    pub mod fmt;
-    pub mod hyphen;
     pub mod tree;
 }
 
-
 use crate::{
     database::database::Database,
-    execute::command,
+    execute::command::{self, FormatOutcome::IoError, FormatOutcome::NonZeroExit},
     networking::{bootstrap, config, network},
 };
 
@@ -93,7 +92,7 @@ async fn main() -> std::io::Result<()> {
     let texmf_config_dir = install_dir.join("texmf-config");
     let texmf_home = home_dir.join("texmf-local");
 
-    println!("Install in '{:?}'", install_dir);
+    println!("Install directory '{:?}'", install_dir);
     println!("Avvio della Pipeline di Download ed Estrazione...");
 
     // eseguiamo la pipeline
@@ -127,7 +126,7 @@ async fn main() -> std::io::Result<()> {
     // create language.dat, language.def, language.dat.lua files
     // and save ls-R index file for texmf-var directory
     println!("Avvio creazione del file di sillabazione...");
-    cmd.execute_addhyphen(&db, &pkg_list)?;
+    cmd.write_addhyphen(&db, &pkg_list)?;
     println!("Fine");
 
     // if context is installed run mtxrun
@@ -144,17 +143,33 @@ async fn main() -> std::io::Result<()> {
     println!("Fine");
 
     // generazione dei formati
+    let t_fmt_start = std::time::Instant::now();
     println!("Avvio creazione dei formati...");
-    cmd.run_command(
-        "fmtutil-sys",
-        &[
-            "--nohash", // non tocca il file ls-R
-            "--no-error-if-no-engine=luametatex,luajithbtex,luajittex,mfluajit",
-            "--no-strict",
-            "--all",
-        ],
-    )?;
-    println!("Fine");
+
+    // scrittura del file fmtutil.cnf, return the format specifications
+    let add_formats = cmd.write_addformat(&db, &pkg_list)?;
+    let fmt_results = cmd.build_all_formats(&add_formats).await;
+    for result in &fmt_results {
+        let fmt_name = result.name.as_str();
+        let outcome = &result.outcome;
+        match outcome {
+            NonZeroExit {
+                code,
+                stdout,
+                stderr,
+            } => println!(
+                "Errore generazione formato {fmt_name}: code={:?} stdout={stdout} stderr={stderr}",
+                code
+            ),
+            IoError(err) => println!("Errore generazione formato su I/O: {err}"),
+            _ => {}
+        }
+    }
+    println!(
+        "End build of {} formats in {:?}",
+        add_formats.len(),
+        t_fmt_start.elapsed()
+    );
 
     // creazione del file ls-R per texmf-var in cui i comandi precedenti hanno scritto
     // build ls-R index file for texmf-var

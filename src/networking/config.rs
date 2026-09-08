@@ -28,7 +28,7 @@ pub mod network {
         env!("CARGO_PKG_NAME"),
         "/",
         env!("CARGO_PKG_VERSION"),
-        " (+https://github.com/robitex/tlx)",
+        " (+https://github.com/robitex/tlx; giaconet.mailbox@gmail.com)",
     );
     pub const POOL_MAX: usize = 10;
 }

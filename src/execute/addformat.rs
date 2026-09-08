@@ -4,9 +4,12 @@
 
 // SPDX-License-Identifier: MPL-2.0
 
+use std::io::Write;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AddFormat<'a> {
     pub pkg_name: &'a str,
+    //
     pub name: &'a str,
     pub engine: &'a str,
     pub mode: Option<&'a str>,
@@ -31,7 +34,7 @@ impl<'a> AddFormat<'a> {
                     "engine" if !value.is_empty() => engine = Some(value),
                     "mode" if !value.is_empty() => mode = Some(value),
                     "patterns" if !value.is_empty() => patterns = Some(value),
-                    "options" if !value.is_empty() => options = Some(value),
+                    "options" if !value.is_empty() => options = Some(value.trim_matches('"')),
                     "fmttriggers" if !value.is_empty() => {
                         fmttriggers = value.split(',').collect();
                     }
@@ -49,5 +52,27 @@ impl<'a> AddFormat<'a> {
             options,
             fmttriggers,
         })
+    }
+
+    /// write the corresponding entry in a Writer (the file fmtutil.cnf)
+    pub fn write_to(&self, out: &mut impl Write) -> std::io::Result<()> {
+        // #
+        // # from latex-bin:
+        // dvilualatex luatex language.dat,language.dat.lua dvilualatex.ini
+        // latex pdftex language.dat -translate-file=cp227.tcx *latex.ini
+        // lualatex luahbtex language.dat,language.dat.lua lualatex.ini
+        // pdflatex pdftex language.dat -translate-file=cp227.tcx *pdflatex.ini
+
+        let enable = if self.mode == Some("disabled") {
+            "#! "
+        } else {
+            ""
+        };
+        let name = self.name;
+        let engine = self.engine;
+        let patterns = self.patterns.unwrap_or("-");
+        let options = self.options.unwrap_or("");
+        writeln!(out, "{enable}{name} {engine} {patterns} {options}")?;
+        Ok(())
     }
 }

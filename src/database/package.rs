@@ -8,7 +8,9 @@ use crate::database::arch::is_known_tl_arch;
 use Entry::*;
 use std::io::Write;
 
-use crate::execute::hyphen::AddHyphen;
+use crate::execute::addformat::{self, AddFormat};
+use crate::execute::addhyphen::AddHyphen;
+
 use crate::networking::installer::RemoteFile;
 
 /// strutture dati di rappresentazione dei dataset dei pacchetti TeX Live
@@ -362,6 +364,29 @@ impl<'a> Package<'a> {
         } else {
             None
         }
+    }
+
+    pub fn get_add_format_directives(&self) -> Vec<AddFormat<'a>> {
+        let mut addformat = Vec::new();
+        if let Some(index) = self.index_execute {
+            let Some(entry) = self.dataset.get(index) else {
+                unreachable!("Logic error: index {index} out of bounds for dataset")
+            };
+            let Execute(execute_list) = entry else {
+                let name = self.name;
+                unreachable!(
+                    "Logic error: index {index} in not a 'execute' list of {name} package"
+                );
+            };
+            for &exec_str in &execute_list.list {
+                if exec_str.starts_with("AddFormat") {
+                    if let Some(fmt) = AddFormat::parse(self.name, exec_str.trim()) {
+                        addformat.push(fmt);
+                    }
+                }
+            }
+        }
+        addformat
     }
 
     pub fn get_hyphen_directives(&self) -> Vec<AddHyphen<'a>> {

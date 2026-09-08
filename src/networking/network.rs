@@ -4,7 +4,7 @@
 
 // SPDX-License-Identifier: MPL-2.0
 
-/// utility function
+///! utility functions for networking
 use reqwest::Client;
 use reqwest::redirect::Policy;
 
@@ -48,7 +48,7 @@ pub async fn discover_ctan_mirror(ctan_base_url: &str) -> std::io::Result<String
 
 pub fn create_client() -> std::io::Result<Client> {
     reqwest::Client::builder()
-        .user_agent("tlx-texlive-express-installer-in-pure-rust/0.1.0 (https://github.com/robitex/tlx)")
+        .user_agent(crate::networking::config::network::USER_AGENT)
         .timeout(std::time::Duration::from_secs(30))
         .pool_idle_timeout(std::time::Duration::from_secs(90))
         .pool_max_idle_per_host(10)

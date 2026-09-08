@@ -12,7 +12,8 @@ use std::time::Instant;
 
 use crate::database::package::Package;
 use crate::database::package::Parser;
-use crate::execute::hyphen::AddHyphen;
+use crate::execute::addformat::AddFormat;
+use crate::execute::addhyphen::AddHyphen;
 use crate::networking::installer::RemoteFile;
 
 pub struct Database<'a> {
@@ -35,6 +36,16 @@ impl<'a> Database<'a> {
             .iter()
             .filter(|p| pkg_to_download.contains(p.get_name()))
             .flat_map(|p| p.get_hyphen_directives().into_iter())
+    }
+
+    pub fn format_directives_iter(
+        &self,
+        pkg_to_download: &AHashSet<&str>,
+    ) -> impl Iterator<Item = AddFormat<'_>> {
+        self.packages
+            .iter()
+            .filter(|p| pkg_to_download.contains(p.get_name()))
+            .flat_map(|p| p.get_add_format_directives().into_iter())
     }
 
     pub fn write_tlpdb<W: Write>(
