@@ -23,14 +23,13 @@ pub mod keys_pgp {
 pub mod network {
     use std::time::Duration;
     //
-    pub const HTTP_TIMEOUT: Duration = Duration::from_secs(30);
+    pub const HTTP_TIMEOUT: Duration = Duration::from_secs(90);
     pub const USER_AGENT: &str = concat!(
         env!("CARGO_PKG_NAME"),
         "/",
         env!("CARGO_PKG_VERSION"),
         " (+https://github.com/robitex/tlx; giaconet.mailbox@gmail.com)",
     );
-    pub const POOL_MAX: usize = 10;
 }
 
 /// Limiti di memoria e buffer

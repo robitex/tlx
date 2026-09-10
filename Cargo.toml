@@ -1,6 +1,6 @@
 [package]
 name = "tlx"
-version = "0.1.1"
+version = "0.1.3"
 edition = "2024"
 
 # Titolo esteso e descrizione del programma
@@ -19,23 +19,23 @@ pgp = "0.20"
 
 # Client HTTP with TLS in pure Rust
 reqwest = { version = "0.13", features = ["stream", "http2", "json"] }
-
 # Hash and Hex (pure Rust)
 sha2 = "0.11"
 hex = "0.4"
-
 # Decompression XZ / LZMA in PURE RUST
 lzma-rs = "0.3"
-
 # Extracting TAR in PURE RUST
 tar = "0.4"
-
 # Runtime asyncronous
 tokio = { version = "1.38", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+tracing-appender = "0.2"
+#
 bytes = "1.6"
 async-channel = "2.5.0"
-
 dunce = "1.0"
+dirs = "7.0"
 
 [profile.release]
 opt-level = 3       # Ottimizza aggressivamente per la velocità

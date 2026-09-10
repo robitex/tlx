@@ -22,6 +22,8 @@ use tar::EntryType;
 use reqwest::Client;
 use sha2::{Digest, Sha512};
 
+use tracing::{error, info};
+
 use crate::database::database::Database;
 use crate::execute::tree;
 
@@ -52,8 +54,9 @@ enum WritePayload {
     },
 }
 
-// EVENTI DELLA PIPELINE PER LOGGING E TRACCIAMENTO
+// eventi della pipeline per logging e tracciamento
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum PipelineEvent {
     ProducerNote {
         counter: usize,
@@ -116,7 +119,7 @@ pub async fn run_pipeline<'a>(
         while let Some(event) = event_rx.recv().await {
             match event {
                 PipelineEvent::ProducerNote { counter } => {
-                    println!("[Producer] sended job number {counter}")
+                    println!("[Producer] sent job number {counter}")
                 }
                 PipelineEvent::DownloadStarted {
                     id_worker,
@@ -162,25 +165,29 @@ pub async fn run_pipeline<'a>(
         // .take(256) // limited for test purposes
         .collect();
     println!(
-        "[pipeline] File compressi da scaricare: {}",
+        "[pipeline] Downloading {} compressed files.",
         remote_files.len()
     );
 
     // STADIO 0: Producer
-    let event_tx_for_producer = tx_event.clone();
+    // let event_tx_for_producer = tx_event.clone();
     let handle_sender = tokio::spawn(async move {
         let mut counter = 0;
         for remote_file in remote_files {
+            let file = remote_file.name.clone();
             match job_tx.send(remote_file).await {
                 Ok(()) => {
                     counter += 1;
-                    if event_tx_for_producer
-                        .send(PipelineEvent::ProducerNote { counter })
-                        .await
-                        .is_err()
-                    {
-                        break;
-                    };
+                    
+                    // if event_tx_for_producer
+                    //     .send(PipelineEvent::ProducerNote { counter })
+                    //     .await
+                    //     .is_err()
+                    // {
+                    //     break;
+                    // };
+                    
+                    info!("[PR] starting run #{counter} for '{file}'");
                 }
                 Err(send_err) => {
                     println!(
@@ -196,7 +203,7 @@ pub async fn run_pipeline<'a>(
     let mut download_handles = Vec::with_capacity(max_concurrent_downloads);
 
     for id_worker in 0..max_concurrent_downloads {
-        let event_tx_clone = tx_event.clone();
+        // let event_tx_clone = tx_event.clone();
         let job_rx_clone = job_rx.clone();
         let extract_tx_clone = extract_tx_mpmc.clone();
         let client_clone = client.clone();
@@ -208,24 +215,34 @@ pub async fn run_pipeline<'a>(
                 let url = format!("{}archive/{}", mirror_url, pkg.name);
                 let sha512 = pkg.expected_sha512;
 
-                let _result = event_tx_clone
-                    .send(PipelineEvent::DownloadStarted {
-                        id_worker,
-                        pkg_name: pkg.name.clone(),
-                    })
-                    .await;
+                // no more messages on event channel
+                // nlet _result = event_tx_clone
+                //    .send(PipelineEvent::DownloadStarted {
+                //        id_worker,
+                //        pkg_name: pkg.name.clone(),
+                //    })
+                //    .await;
+
+                info!("[DL {id_worker}] downloading file '{}'", pkg.name);
 
                 match download_file(&client_clone, &url, &sha512).await {
                     Ok(bytes) => {
                         let bytes_len = bytes.len();
-                        let _ = event_tx_clone
-                            .send(PipelineEvent::DownloadFinished {
-                                id_worker,
-                                pkg_name: pkg.name.clone(),
-                                bytes_len,
-                            })
-                            .await;
 
+                        // let _ = event_tx_clone
+                        //    .send(PipelineEvent::DownloadFinished {
+                        //        id_worker,
+                        //        pkg_name: pkg.name.clone(),
+                        //        bytes_len,
+                        //    })
+                        //    .await;
+
+                        info!(
+                            "[DL {id_worker}] download complete: '{}' ({bytes_len} bytes)",
+                            pkg.name
+                        );
+
+                        // invio del file alla fase di decompressione
                         let extract_job = CompressedPackage {
                             name: pkg.name,
                             bytes,
@@ -236,13 +253,19 @@ pub async fn run_pipeline<'a>(
                         }
                     }
                     Err(err) => {
-                        let _ = event_tx_clone
-                            .send(PipelineEvent::DownloadFailed {
-                                id_worker,
-                                pkg_name: pkg.name,
-                                error: err.to_string(),
-                            })
-                            .await;
+                        error!(
+                            "[DL {id_worker}] fail to download '{}': {}",
+                            pkg.name,
+                            err.to_string()
+                        );
+
+                        // let _ = event_tx_clone
+                        //     .send(PipelineEvent::DownloadFailed {
+                        //         id_worker,
+                        //         pkg_name: pkg.name,
+                        //         error: err.to_string(),
+                        //     })
+                        //     .await;
                     }
                 }
             }
@@ -264,7 +287,7 @@ pub async fn run_pipeline<'a>(
 
     for id_worker in 0..num_extract_workers {
         let rx_extract_clone = rx_extract_mpmc.clone();
-        let tx_event_clone = tx_event.clone();
+        // let tx_event_clone = tx_event.clone();
         let tx_archives_clone = tx_write_payload.clone();
 
         // worker dello stadio 2: unpacking dei file
@@ -272,10 +295,12 @@ pub async fn run_pipeline<'a>(
             while let Ok(compressed_pkg) = rx_extract_clone.recv_blocking() {
                 let pkg_name = compressed_pkg.name;
 
-                let _ = tx_event_clone.blocking_send(PipelineEvent::ExtractionStarted {
-                    id_worker,
-                    pkg_name: pkg_name.clone(),
-                });
+                // let _ = tx_event_clone.blocking_send(PipelineEvent::ExtractionStarted {
+                //    id_worker,
+                //    pkg_name: pkg_name.clone(),
+                // });
+
+                info!("[XZ {id_worker}] extracting '{pkg_name}'");
 
                 let bytes = compressed_pkg.bytes;
                 let relocated = compressed_pkg.relocated;
@@ -283,19 +308,22 @@ pub async fn run_pipeline<'a>(
                 // chiamata della funzione principale del secondo stadio della pipeline
                 match unpack_and_route(pkg_name.clone(), bytes, relocated, &tx_archives_clone) {
                     Ok(()) => {
-                        // Un unico log chiaro a fine pacchetto!
-                        let _ = tx_event_clone.send(PipelineEvent::ExtractionFinished {
-                            id_worker,
-                            pkg_name: pkg_name,
-                        });
+                        // let _ = tx_event_clone.send(PipelineEvent::ExtractionFinished {
+                        //     id_worker,
+                        //     pkg_name: pkg_name,
+                        // });
+
+                        info!("[XZ {id_worker}] '{pkg_name}' extracted");
                     }
                     Err(err_msg) => {
                         // Log dell'errore sul pacchetto senza interrompere l'intera pipeline
-                        let _ = tx_event_clone.send(PipelineEvent::ExtractionFailed {
-                            id_worker,
-                            pkg_name,
-                            error: err_msg,
-                        });
+                        // let _ = tx_event_clone.send(PipelineEvent::ExtractionFailed {
+                        //     id_worker,
+                        //     pkg_name,
+                        //     error: err_msg,
+                        // });
+
+                        error!("[XZ {id_worker}] failed extraction for '{pkg_name}': {err_msg}");
                     }
                 };
             }

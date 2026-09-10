@@ -1,3 +1,5 @@
+[![GitHub Release](https://img.shields.io/github/v/release/robitex/tlx)](https://github.com/robitex/tlx/releases)
+
 # TeX Live eXpress (tlx)
 
 **tlx** is a high-performance alternative installer for **TeX Live**, written in Rust.
@@ -5,6 +7,11 @@
 It is designed to drastically reduce the time required to install and set up TeX Live
 distributions by leveraging parallel network downloads, fast decompression pipelines, and
 optimized disk I/O.
+
+## 🚧 Project Status 🚧
+
+`tlx` is currently in an experimental phase and is not yet considered production-ready.
+Features and internal architectures are subject to breaking changes as development progresses.
 
 ## Key Features
 

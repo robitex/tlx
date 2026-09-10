@@ -18,13 +18,36 @@ use crate::networking::installer::RemoteFile;
 
 pub struct Database<'a> {
     packages: Vec<Package<'a>>,
-    // pkg_name -> index position of corresponding Package in the vec object
     index: AHashMap<&'a str, usize>,
     target_arch: &'static str,
-    pub options: ConfigData<'a>,
+    pub config_options: ConfigData<'a>,
     mirror_url: &'a str,
     include_doc: bool,
     include_src: bool,
+}
+
+#[derive(Default)]
+pub struct ConfigData<'a> {
+    // config
+    pub release: u16,
+    min_release: u16,
+    frozen: bool,
+    // installation
+    opt_autobackup: u32,
+    opt_backupdir: &'a str,
+    opt_create_formats: bool,
+    opt_desktop_integration: bool,
+    opt_file_assocs: u8,
+    opt_generate_updmap: bool,
+    opt_install_docfiles: bool,
+    opt_install_srcfiles: bool,
+    opt_location: &'a str,
+    opt_post_code: bool,
+    opt_sys_bin: &'a str,
+    opt_sys_info: &'a str,
+    opt_sys_man: &'a str,
+    opt_w32_multi_user: bool,
+    setting_available_architectures: Vec<&'a str>,
 }
 
 impl<'a> Database<'a> {
@@ -53,7 +76,7 @@ impl<'a> Database<'a> {
         writer: &mut W,
         installed_package: &AHashSet<&str>,
     ) -> std::io::Result<()> {
-        let opts = &self.options;
+        let opts = &self.config_options;
         // write 00texlive.config meta/virtual package
         writeln!(
             writer,
@@ -216,13 +239,13 @@ depend release/{}\n",
         let mut iter_block = iter_block.peekable();
 
         // data expected from parsing
-        let mut options = ConfigData::default();
+        let mut config_options = ConfigData::default();
 
         // lettura dati di configurazione
         while let Some(lines_block) = iter_block.peek() {
             if lines_block.starts_with("name 00texlive.") {
                 let lines_block = iter_block.next().unwrap(); // ora sì, consuma
-                parse_00texlive_block(lines_block, &mut options);
+                parse_00texlive_block(lines_block, &mut config_options);
             } else {
                 break; // non consumato: resta disponibile per il ciclo successivo
             }
@@ -249,36 +272,12 @@ depend release/{}\n",
             packages: vec_packages,
             index: map_index,
             target_arch,
-            options,
+            config_options,
             mirror_url,
             include_doc,
             include_src,
         }
     }
-}
-
-#[derive(Default)]
-pub struct ConfigData<'a> {
-    // config
-    pub release: u16,
-    min_release: u16,
-    frozen: bool,
-    // installation
-    opt_autobackup: u32,
-    opt_backupdir: &'a str,
-    opt_create_formats: bool,
-    opt_desktop_integration: bool,
-    opt_file_assocs: u8,
-    opt_generate_updmap: bool,
-    opt_install_docfiles: bool,
-    opt_install_srcfiles: bool,
-    opt_location: &'a str,
-    opt_post_code: bool,
-    opt_sys_bin: &'a str,
-    opt_sys_info: &'a str,
-    opt_sys_man: &'a str,
-    opt_w32_multi_user: bool,
-    setting_available_architectures: Vec<&'a str>,
 }
 
 fn parse_00texlive_block<'a>(lines_block: &'a str, config_data: &mut ConfigData<'a>) {

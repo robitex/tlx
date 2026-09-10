@@ -8,7 +8,7 @@ use crate::database::arch::is_known_tl_arch;
 use Entry::*;
 use std::io::Write;
 
-use crate::execute::addformat::{self, AddFormat};
+use crate::execute::addformat::AddFormat;
 use crate::execute::addhyphen::AddHyphen;
 
 use crate::networking::installer::RemoteFile;
@@ -24,7 +24,7 @@ pub struct Parser;
 enum Entry<'a> {
     // general information:
     Category(&'a str),
-    Revision(u64),
+    Revision(u32),
     Catalogue(&'a str),
     Shortdesc(&'a str),
     Longdesc(Items<'a>),
@@ -70,9 +70,11 @@ struct Container<'a> {
 #[derive(Debug)]
 pub struct Package<'a> {
     name: &'a str,
+    revision: u32,
     relocated: bool,
+    //
     dataset: Vec<Entry<'a>>,
-
+    //
     index_depend: Option<usize>,        // index of Depend() Entry
     index_execute: Option<usize>,       // index of execute directives
     index_post_action: Option<usize>,   // index of postaction directives
@@ -205,7 +207,7 @@ impl<'a> Entry<'a> {
         writer.write_all(b"\n")
     }
     #[inline]
-    fn write_str_u64<W: Write>(writer: &mut W, key: &[u8], val: &u64) -> std::io::Result<()> {
+    fn write_str_u32<W: Write>(writer: &mut W, key: &[u8], val: &u32) -> std::io::Result<()> {
         writer.write_all(key)?;
         writer.write_all(b" ")?;
         write!(writer, "{val}\n")
@@ -232,7 +234,7 @@ impl<'a> Entry<'a> {
     fn write_to<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
         match self {
             Category(category) => Self::write_str_str(writer, b"category", category.as_bytes())?,
-            Revision(rev) => Self::write_str_u64(writer, b"revision", rev)?,
+            Revision(rev) => Self::write_str_u32(writer, b"revision", rev)?,
             Catalogue(cat) => Self::write_str_str(writer, b"catalogue", cat.as_bytes())?,
             Shortdesc(desc) => Self::write_str_str(writer, b"shortdesc", desc.as_bytes())?,
             Longdesc(rows) => rows.write_to(writer)?,
@@ -268,6 +270,11 @@ impl<'a> Entry<'a> {
 }
 
 impl<'a> Package<'a> {
+    // examples of files name
+    // 12many.r79618.tar.xz
+    // 12many.doc.r79618.tar.xz
+    // 12many.source.r79618.tar.xz
+
     fn archive_spec(&self) -> Option<RemoteFile> {
         if let Some(index) = self.index_container {
             let Some(entry) = self.dataset.get(index) else {
@@ -278,7 +285,7 @@ impl<'a> Package<'a> {
                 unreachable!("Logic error: index {index} in not a container of {name} package");
             };
             Some(RemoteFile::new(
-                format!("{}.tar.xz", self.name),
+                format!("{}.r{}.tar.xz", self.name, self.revision),
                 container.checksum.to_string(),
                 self.relocated,
             ))
@@ -299,7 +306,7 @@ impl<'a> Package<'a> {
                 );
             };
             Some(RemoteFile::new(
-                format!("{}.doc.tar.xz", self.name),
+                format!("{}.doc.r{}.tar.xz", self.name, self.revision),
                 doc_container.checksum.to_string(),
                 self.relocated,
             ))
@@ -320,7 +327,7 @@ impl<'a> Package<'a> {
                 );
             };
             Some(RemoteFile::new(
-                format!("{}.source.tar.xz", self.name),
+                format!("{}.source.r{}.tar.xz", self.name, self.revision),
                 src_container.checksum.to_string(),
                 self.relocated,
             ))
@@ -349,6 +356,7 @@ impl<'a> Package<'a> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn execute_as_slice(&self) -> Option<&[&'a str]> {
         if let Some(index) = self.index_execute {
             let Some(entry) = self.dataset.get(index) else {
@@ -413,7 +421,8 @@ impl<'a> Package<'a> {
         addhyphen
     }
 
-    pub fn postaction_al_slice(&self) -> Option<&[&'a str]> {
+    #[allow(dead_code)]
+    pub fn postaction_as_slice(&self) -> Option<&[&'a str]> {
         if let Some(index) = self.index_post_action {
             let Some(entry) = self.dataset.get(index) else {
                 unreachable!("Logic error: index {index} out of bounds for dataset");
@@ -434,8 +443,9 @@ impl<'a> Package<'a> {
     fn new(name: &'a str) -> Package<'a> {
         Package {
             name,
+            revision: 0,
             relocated: false,
-            dataset: Vec::with_capacity(28), // registered max element 24
+            dataset: Vec::with_capacity(28), // max elements registered 24
             // main element indexing
             index_depend: None,
             index_execute: None,
@@ -512,7 +522,10 @@ impl<'a> Package<'a> {
             .expect("la terza riga non ha la chiave 'revision': pacchetto {field_01_name}")
             .parse()
             .expect("atteso un intero per il campo 'revision': pacchetto {field_01_name}");
+
         pkg.insert(Revision(revision));
+        // temporary solution:
+        pkg.revision = revision;
 
         let mut line_processed = 3_usize;
 

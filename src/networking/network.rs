@@ -49,7 +49,7 @@ pub async fn discover_ctan_mirror(ctan_base_url: &str) -> std::io::Result<String
 pub fn create_client() -> std::io::Result<Client> {
     reqwest::Client::builder()
         .user_agent(crate::networking::config::network::USER_AGENT)
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(crate::networking::config::network::HTTP_TIMEOUT)
         .pool_idle_timeout(std::time::Duration::from_secs(90))
         .pool_max_idle_per_host(10)
         .build()
