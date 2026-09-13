@@ -38,14 +38,23 @@ use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 // main function
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    // phase 1: getting texlive.tlpdb file content
+    // phase 0: retrives which binary architecture corresponds to the host system
+    let t_arch = crate::database::arch::get_target_arch();
+    let target_arch = if let Some(target_arch) = t_arch {
+        println!("Installation starts for {} target architecture", target_arch);
+        target_arch
+    } else {
+        eprintln!("Failed to resolve binaries' architecture. Program exiting");
+        std::process::exit(1);
+    };
+
+    // phase 1: getting texlive.tlpdb file's content
     let ctan_base_url = config::ctan::CTAN_MULTIPLEXER;
     let mirror_url = network::discover_ctan_mirror(ctan_base_url).await?;
     let client = network::create_client()?;
     let texlive_tlpdb_content = bootstrap::run_bootstrap(&client, &mirror_url).await?;
 
     // phase 2: parsing
-    let target_arch = "windows";
     let include_doc = true;
     let include_src = true;
     let db = Database::from_tlpdb(
@@ -56,8 +65,8 @@ async fn main() -> std::io::Result<()> {
         &mirror_url,
         false,
     );
-    // debug!
-    println!("Pacchetti letti: {}", db.len());
+    // total number of package
+    println!("Found {} packages.", db.len());
 
     // directory di installazione locale utente
     // oppure la stessa dove si lancia tlx
@@ -115,7 +124,7 @@ async fn main() -> std::io::Result<()> {
         pkg_list.extend(windows_extra);
     }
 
-    println!("Numero pacchetti dello scheme-full: {}", pkg_list.len());
+    println!("Packages found for the scheme-full: {}", pkg_list.len());
 
     // phase 5: launch the installer
     let start_time = std::time::Instant::now();

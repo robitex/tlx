@@ -1,0 +1,110 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ "main" ]
+    # Aggiungiamo i tag: il workflow creerà una release solo se spingi un tag che inizia con "v"
+    tags:
+      - 'v*' 
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # COMPILAZIONE LINUX E WINDOWS
+  build:
+    name: Build on ${{ matrix.os }} for ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - name: Checkout del codice
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install musl-tools (Linux)
+        if: contains(matrix.target, 'linux-musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Compilazione in Release
+        run: cargo build --release --target ${{ matrix.target }}
+
+      # Rinominiamo l'eseguibile aggiungendo il target, così non si sovrascrivono
+      - name: Rinomina e prepara artefatti (Linux)
+        if: runner.os == 'Linux'
+        run: mv target/${{ matrix.target }}/release/tlx tlx-${{ matrix.target }}
+
+      - name: Rinomina e prepara artefatti (Windows)
+        if: runner.os == 'Windows'
+        run: mv target\${{ matrix.target }}\release\tlx.exe tlx-${{ matrix.target }}.exe
+
+      - name: Upload degli artefatti parziali
+        uses: actions/upload-artifact@v4
+        with:
+          name: tlx-${{ matrix.target }}
+          path: tlx-*
+
+  # COMPILAZIONE MACOS (UNIVERSAL BINARY)
+  build-macos-universal:
+    name: Build Universal Binary for macOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout del codice
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+
+      - name: Compilazione per Intel e Apple Silicon
+        run: |
+          cargo build --release --target x86_64-apple-darwin
+          cargo build --release --target aarch64-apple-darwin
+
+      - name: Fusione in Universal Binary con lipo
+        run: |
+          lipo -create -output tlx-universal-darwin \
+            target/x86_64-apple-darwin/release/tlx \
+            target/aarch64-apple-darwin/release/tlx
+
+      - name: Upload dell'eseguibile Universal
+        uses: actions/upload-artifact@v4
+        with:
+          name: tlx-universal-darwin
+          path: tlx-universal-darwin
+
+  # CREAZIONE DELLA RELEASE UFFICIALE SU GITHUB
+  release:
+    name: Pubblica GitHub Release
+    # Attende che ENTRAMBI i job di compilazione finiscano prima di partire
+    needs: [build, build-macos-universal]
+    runs-on: ubuntu-latest
+    # Esegue questo blocco SOLO se l'evento è un push di un Tag (es. v1.0.0)
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Scarica tutti gli artefatti
+        uses: actions/download-artifact@v4
+        with:
+          path: binari_da_pubblicare
+          pattern: tlx-*
+          # Importante: mette tutti i file nella stessa cartella invece di
+          # creare sottocartelle
+          merge-multiple: true 
+
+      - name: Crea Release e Carica Binari
+        uses: softprops/action-gh-release@v2
+        with:
+          files: binari_da_pubblicare/*
+          generate_release_notes: true # Genera un changelog automatico basato sui commit

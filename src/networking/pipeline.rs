@@ -27,7 +27,7 @@ use crate::database::database::Database;
 use crate::execute::tree;
 use crate::networking::config;
 
-// file da scaricare per lo stadio 1
+/// file da scaricare per lo stadio 1
 pub struct RemoteFile {
     name: String,
     expected_sha512: String,
@@ -187,7 +187,7 @@ pub async fn run_pipeline<'a>(
                     //     break;
                     // };
 
-                    info!("[PR] starting run #{counter} for '{file}'");
+                    info!("[PR] start #{counter}: file '{file}'");
                 }
                 Err(send_err) => {
                     println!(
@@ -216,14 +216,14 @@ pub async fn run_pipeline<'a>(
                 let sha512 = pkg.expected_sha512;
 
                 // no more messages on event channel
-                // nlet _result = event_tx_clone
+                // let _result = event_tx_clone
                 //    .send(PipelineEvent::DownloadStarted {
                 //        id_worker,
                 //        pkg_name: pkg.name.clone(),
                 //    })
                 //    .await;
 
-                info!("[DL {id_worker}] downloading file '{}'", pkg.name);
+                info!("[DL {id_worker}] downloading '{}'", pkg.name);
 
                 match download_file(&client_clone, &url, &sha512).await {
                     Ok(bytes) => {
@@ -238,7 +238,7 @@ pub async fn run_pipeline<'a>(
                         //    .await;
 
                         info!(
-                            "[DL {id_worker}] download complete: '{}' ({bytes_len} bytes)",
+                            "[DL {id_worker}] download '{}' completed ({bytes_len} bytes)",
                             pkg.name
                         );
 
@@ -277,7 +277,7 @@ pub async fn run_pipeline<'a>(
     // STADIO 2: Worker di Decompressione
     let num_extract_workers = std::thread::available_parallelism()
         .map(|n| n.get())
-        .unwrap_or(4); // Fallback ragionevole in caso raro di errore I/O
+        .unwrap_or(4); // fallback ragionevole in caso raro di errore I/O
 
     let mut extract_handles = Vec::with_capacity(num_extract_workers);
 
@@ -329,7 +329,7 @@ pub async fn run_pipeline<'a>(
                         //     error: err_msg,
                         // });
 
-                        error!("[XZ {id_worker}] failed extraction for '{pkg_name}': {err_msg}");
+                        error!("[XZ {id_worker}] extraction failed for '{pkg_name}': {err_msg}");
                     }
                 };
             }
@@ -358,12 +358,12 @@ pub async fn run_pipeline<'a>(
         };
     }
 
-    // Nessun nuovo pacchetto verrà più inviato a `extract_rx_mpmc`.
-    // Droppiamo sia il receiver principale sia l'eventuale sender rimasto nel main scope!
+    // nessun nuovo pacchetto verrà più inviato a `extract_rx_mpmc`.
+    // drop sia il receiver principale sia dell'eventuale sender rimasto nel main scope
     rx_extract_mpmc.close();
     drop(extract_tx_mpmc);
 
-    // 2. I download sono finiti. 'extract_tx_mpmc' è stato già droppato nel main.
+    // i download sono finiti. 'extract_tx_mpmc' è stato già droppato nel main.
     // Attendiamo che TUTTI i worker di estrazione svuotino la coda e terminino.
     for h in extract_handles {
         match h.await {
@@ -375,7 +375,7 @@ pub async fn run_pipeline<'a>(
         };
     }
 
-    // Droppiamo la copia di 'tx_files' che risiedeva nello scope di run_pipeline
+    // drop della copia di 'tx_files' che risiedeva nello scope di run_pipeline
     drop(tx_write_payload);
 
     // ORA 'rx_files' nel Disk Writer vede 0 trasmettitori attivi, riceve None e termina!
@@ -383,7 +383,7 @@ pub async fn run_pipeline<'a>(
         .await
         .map_err(|e| format!("Errore Join Disk Writer: {e}"))??;
 
-    // Chiudiamo il trasmettitore del logger per fare uscire anche il logger
+    // chiudiamo il trasmettitore del logger per fare uscire anche il logger
     drop(tx_event);
 
     logger_handle
@@ -393,7 +393,7 @@ pub async fn run_pipeline<'a>(
     Ok(())
 }
 
-// Tipo di errore dedicato per la fase di download e checksum
+// tipo di errore dedicato per la fase di download e checksum
 #[derive(Debug)]
 pub enum DownloadError {
     Network(reqwest::Error),
@@ -567,7 +567,7 @@ fn unpack_and_route(
             EntryType::Directory => {
                 tx.blocking_send(WritePayload::Directory { name, routed_path })
                     .map_err(|_| {
-                        "[unpack] canale disk writer chiuso inaspettatamnete".to_string()
+                        "[unpack] canale disk writer chiuso inaspettatamente".to_string()
                     })?;
             }
             EntryType::Regular => {
@@ -591,7 +591,7 @@ fn unpack_and_route(
             }
         }
     }
-    info!("[XZ {id_worker}] job '{name}' sent to the disk writer {file_counter} files");
+    info!("[XZ {id_worker}] '{name}' sent to the disk writer {file_counter} files");
     Ok(())
 }
 

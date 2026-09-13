@@ -24,3 +24,12 @@ const TL_ARCHITECTURES: [&str; 13] = [
 pub fn is_known_tl_arch(arch: &str) -> bool {
     TL_ARCHITECTURES.contains(&arch)
 }
+
+/// Recupera l'architettura TeX Live generata da build.rs a tempo di compilazione
+pub fn get_target_arch() -> Option<&'static str> {
+    match env!("TLX_ARCH") {
+        "unknown" => None,
+        arch => Some(arch),
+    }
+}
+
