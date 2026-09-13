@@ -12,20 +12,20 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use bytes::Bytes;
-use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
-
-use tar::Archive;
-use tar::EntryType;
-
+use bytes::{Bytes, BytesMut};
+use futures_util::StreamExt;
 use reqwest::Client;
 use sha2::{Digest, Sha512};
-
+use tar::Archive;
+use tar::EntryType;
+use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
+use tokio::time::timeout;
 use tracing::{error, info};
 
 use crate::database::database::Database;
 use crate::execute::tree;
+use crate::networking::config;
 
 // file da scaricare per lo stadio 1
 pub struct RemoteFile {
@@ -178,7 +178,7 @@ pub async fn run_pipeline<'a>(
             match job_tx.send(remote_file).await {
                 Ok(()) => {
                     counter += 1;
-                    
+
                     // if event_tx_for_producer
                     //     .send(PipelineEvent::ProducerNote { counter })
                     //     .await
@@ -186,7 +186,7 @@ pub async fn run_pipeline<'a>(
                     // {
                     //     break;
                     // };
-                    
+
                     info!("[PR] starting run #{counter} for '{file}'");
                 }
                 Err(send_err) => {
@@ -306,14 +306,20 @@ pub async fn run_pipeline<'a>(
                 let relocated = compressed_pkg.relocated;
 
                 // chiamata della funzione principale del secondo stadio della pipeline
-                match unpack_and_route(pkg_name.clone(), bytes, relocated, &tx_archives_clone) {
+                match unpack_and_route(
+                    id_worker,
+                    pkg_name.clone(),
+                    bytes,
+                    relocated,
+                    &tx_archives_clone,
+                ) {
                     Ok(()) => {
                         // let _ = tx_event_clone.send(PipelineEvent::ExtractionFinished {
                         //     id_worker,
                         //     pkg_name: pkg_name,
                         // });
 
-                        info!("[XZ {id_worker}] '{pkg_name}' extracted");
+                        // info!("[XZ {id_worker}] '{pkg_name}' extracted");
                     }
                     Err(err_msg) => {
                         // Log dell'errore sul pacchetto senza interrompere l'intera pipeline
@@ -395,6 +401,10 @@ pub enum DownloadError {
         expected: String,
         calculated: String,
     },
+    NotFound,
+    Stalled {
+        bytes_received: usize,
+    },
 }
 
 impl fmt::Display for DownloadError {
@@ -410,6 +420,11 @@ impl fmt::Display for DownloadError {
                     "Mismatch SHA-512! Atteso: {expected}, Calcolato: {calculated}"
                 )
             }
+            DownloadError::NotFound => write!(f, "File not found on server"),
+            DownloadError::Stalled { bytes_received } => write!(
+                f,
+                "Download inactive for longer than timeout. Bytes received {bytes_received}"
+            ),
         }
     }
 }
@@ -423,6 +438,8 @@ impl From<reqwest::Error> for DownloadError {
 }
 
 /// Scarica un file in memoria e verifica l'hash SHA-512 rispetto a quello atteso.
+/// Il download del file deve rimanere attivo per almento il tempo definito
+/// nella costante CHUNK_INACTIVITY_TIMEOUT.
 ///
 /// - `expected_sha512`: l'hash SHA-512 in formato esadecimale (da tlpdb)
 pub async fn download_file(
@@ -431,16 +448,51 @@ pub async fn download_file(
     expected_sha512: &str,
 ) -> Result<Bytes, DownloadError> {
     // Download asincrono dei byte via HTTP
-    let response = client.get(url).send().await?.error_for_status()?;
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(DownloadError::Network)?
+        .error_for_status()
+        .map_err(|e| match e.status() {
+            Some(status) if status == reqwest::StatusCode::NOT_FOUND => DownloadError::NotFound,
+            _ => DownloadError::Network(e),
+        })?;
 
-    let bytes = response.bytes().await?;
+    let mut stream = response.bytes_stream();
+    let mut buf = BytesMut::new();
 
-    // Controllo SHA-512
+    loop {
+        match timeout(config::network::CHUNK_INACTIVITY_TIMEOUT, stream.next()).await {
+            // il chunk ricevuto in tempo resetta implicitamente il timer che al prossimo ciclo si riazzera
+            // caso 1: ricevuto un chunk di dati dalla rete
+            Ok(Some(Ok(chunk))) => {
+                buf.extend_from_slice(&chunk);
+            }
+            // caso 2: errore di rete propagato da reqwest (connessione chiusa, reset, ecc.)
+            Ok(Some(Err(e))) => {
+                return Err(DownloadError::Network(e));
+            }
+            // caso 3: stream terminato correttamente (fine del body)
+            Ok(None) => break,
+
+            // caso 4: nessun chunk per CHUNK_INACTIVITY_TIMEOUT: il download è classificato inattivo.
+            Err(_) => {
+                return Err(DownloadError::Stalled {
+                    bytes_received: buf.len(),
+                });
+            }
+        }
+    }
+
+    let bytes = buf.freeze();
+
+    // controllo SHA-512
     let mut hasher = Sha512::new();
     hasher.update(&bytes);
     let calculated_hash = hex::encode(hasher.finalize());
 
-    // Confronto case-insensitive (gli hash nel tlpdb possono essere minuscoli)
+    // confronto case-insensitive. Gli hash nel tlpdb potrebbero essere minuscoli
     if !calculated_hash.eq_ignore_ascii_case(expected_sha512) {
         return Err(DownloadError::ChecksumMismatch {
             expected: expected_sha512.to_lowercase(),
@@ -458,6 +510,7 @@ pub async fn download_file(
 
 // decompressione: stadio 2
 fn unpack_and_route(
+    id_worker: usize,
     name: String,
     compressed_data: Bytes,
     relocated: bool,
@@ -472,8 +525,11 @@ fn unpack_and_route(
     let cursor = std::io::Cursor::new(&compressed_data);
     let estimated_capacity = compressed_data.len().saturating_mul(4);
     let mut decompressed_data = Vec::with_capacity(estimated_capacity);
+
     lzma_rs::xz_decompress(&mut std::io::BufReader::new(cursor), &mut decompressed_data)
         .map_err(|e| format!("[unpack stage] Errore decompressione XZ con lzma-rs: {e}"))?;
+    info!("[XZ {id_worker}] '{name}' extracted");
+
     // lettura archivio tar
     let tar_cursor = std::io::Cursor::new(decompressed_data);
     let mut archive = Archive::new(tar_cursor);
@@ -483,6 +539,7 @@ fn unpack_and_route(
 
     // extract files from tar archive and route the file destination
     let name_str = name.as_str();
+    let mut file_counter = 0_u32;
     for entry in entries {
         let mut entry = entry.map_err(|e| {
             format!("[unpack stage] Errore lettura voce TAR: {e} per il file {name_str}")
@@ -514,6 +571,7 @@ fn unpack_and_route(
                     })?;
             }
             EntryType::Regular => {
+                file_counter += 1;
                 let size = entry.header().size()
                     .map_err(|e| format!("[unpack] impossibile convertire il campo size dell'entry tar {name_str}: {e}"))?
                 as usize;
@@ -533,7 +591,7 @@ fn unpack_and_route(
             }
         }
     }
-
+    info!("[XZ {id_worker}] job '{name}' sent to the disk writer {file_counter} files");
     Ok(())
 }
 

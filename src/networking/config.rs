@@ -23,7 +23,10 @@ pub mod keys_pgp {
 pub mod network {
     use std::time::Duration;
     //
-    pub const HTTP_TIMEOUT: Duration = Duration::from_secs(90);
+    /// Timeout di inattività: quanto tempo può passare senza ricevere
+    /// un nuovo chunk prima di considerare il download morto.
+    pub const CHUNK_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(16);
+
     pub const USER_AGENT: &str = concat!(
         env!("CARGO_PKG_NAME"),
         "/",

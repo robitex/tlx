@@ -63,7 +63,7 @@ async fn main() -> std::io::Result<()> {
     // oppure la stessa dove si lancia tlx
     let home_dir = location::get_default_home().unwrap_or(std::env::current_dir()?);
     std::fs::create_dir_all(&home_dir)?;
-    
+
     let home_dir = dunce::canonicalize(&home_dir)?;
 
     // creation of the installation context
