@@ -14,7 +14,7 @@ use crate::database::package::Package;
 use crate::database::package::Parser;
 use crate::execute::addformat::AddFormat;
 use crate::execute::addhyphen::AddHyphen;
-use crate::networking::installer::RemoteFile;
+use crate::networking::pipeline::RemoteFile;
 
 pub struct Database<'a> {
     packages: Vec<Package<'a>>,

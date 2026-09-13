@@ -13,7 +13,7 @@ mod database {
 mod networking {
     pub mod bootstrap;
     pub mod config;
-    pub mod installer;
+    pub mod pipeline;
     pub mod network;
 }
 
@@ -122,7 +122,7 @@ async fn main() -> std::io::Result<()> {
     println!("Avvio della Pipeline di Download ed Estrazione...");
 
     // eseguiamo la pipeline
-    networking::installer::run_pipeline(&client, &mirror_url, &db, &pkg_list, &install_dir, 12)
+    networking::pipeline::run_pipeline(&client, &mirror_url, &db, &pkg_list, &install_dir, 12)
         .await
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
 

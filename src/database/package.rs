@@ -11,7 +11,7 @@ use std::io::Write;
 use crate::execute::addformat::AddFormat;
 use crate::execute::addhyphen::AddHyphen;
 
-use crate::networking::installer::RemoteFile;
+use crate::networking::pipeline::RemoteFile;
 
 /// strutture dati di rappresentazione dei dataset dei pacchetti TeX Live
 
