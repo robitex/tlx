@@ -6,6 +6,22 @@
 
 use std::env;
 
+// "windows"
+// "universal-darwin"
+// "x86_64-darwinlegacy"
+// "x86_64-linux"
+// "aarch64-linux"
+// "i386-linux"
+// "x86_64-linuxmusl"
+// "amd64-freebsd"
+// "i386-freebsd"
+// 
+// "i386-netbsd"
+// "amd64-netbsd"
+// "armhf-linux"
+// "x86_64-cygwin"
+
+
 fn main() {
     // cargo imposta sempre la variabile TARGET durante la build
     let target = env::var("TARGET").expect("Variabile d'ambiente TARGET non trovata");
@@ -27,8 +43,6 @@ fn main() {
     } else if target.contains("linux-musl") {
         if target.starts_with("x86_64") {
             "x86_64-linuxmusl"
-        } else if target.starts_with("aarch64") {
-            "aarch64-linuxmusl"
         } else {
             "unknown"
         }
@@ -46,12 +60,15 @@ fn main() {
 
     if tl_arch == "unknown" {
         // avvisa il compilatore nel caso in cui qualcuno provi a compilare per un target non supportato
-        println!("cargo:warning=Target '{}' has not a corresponding TeX Live architecture.", target);
+        println!(
+            "cargo:warning=Target '{}' has not a corresponding TeX Live architecture.",
+            target
+        );
     }
 
     // esporta il risultato come variabile d'ambiente leggibile dal codice sorgente
     println!("cargo:rustc-env=TLX_ARCH={}", tl_arch);
-    
+
     // riavvia lo script di build solo se questo file viene modificato
     println!("cargo:rerun-if-changed=build.rs");
 }

@@ -32,4 +32,3 @@ pub fn get_target_arch() -> Option<&'static str> {
         arch => Some(arch),
     }
 }
-

@@ -13,8 +13,8 @@ mod database {
 mod networking {
     pub mod bootstrap;
     pub mod config;
-    pub mod pipeline;
     pub mod network;
+    pub mod pipeline;
 }
 
 mod execute {
@@ -41,7 +41,10 @@ async fn main() -> std::io::Result<()> {
     // phase 0: retrives which binary architecture corresponds to the host system
     let t_arch = crate::database::arch::get_target_arch();
     let target_arch = if let Some(target_arch) = t_arch {
-        println!("Installation starts for {} target architecture", target_arch);
+        println!(
+            "Installation starts for {} target architecture",
+            target_arch
+        );
         target_arch
     } else {
         eprintln!("Failed to resolve binaries' architecture. Program exiting");

@@ -168,7 +168,12 @@ impl<'a> Items<'a> {
         let prefix = self.prefix.as_bytes();
         for &elem in self.list.iter() {
             writer.write_all(prefix)?;
-            writer.write_all(elem.as_bytes())?;
+            if let Some(reloc_path) = elem.strip_prefix("RELOC") {
+                writer.write_all(b"texmf-dist")?;
+                writer.write_all(reloc_path.as_bytes())?;
+            } else {
+                writer.write_all(elem.as_bytes())?;
+            }
             writer.write_all(b"\n")?;
         }
         Ok(())
@@ -231,14 +236,14 @@ impl<'a> Entry<'a> {
     }
 
     // funzione di scrittura su buffer
-    fn write_to<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+    fn write_to<W: Write>(&self, writer: &mut W, is_scheme: bool) -> std::io::Result<()> {
         match self {
             Category(category) => Self::write_str_str(writer, b"category", category.as_bytes())?,
             Revision(rev) => Self::write_str_u32(writer, b"revision", rev)?,
             Catalogue(cat) => Self::write_str_str(writer, b"catalogue", cat.as_bytes())?,
             Shortdesc(desc) => Self::write_str_str(writer, b"shortdesc", desc.as_bytes())?,
             Longdesc(rows) => rows.write_to(writer)?,
-            Relocated => writer.write_all(b"relocated 1\n")?,
+            Relocated => if is_scheme { writer.write_all(b"relocated 1\n")? }, // relocated package must be localized and marked as a normal package
             Depend(rows) => rows.write_to(writer)?,
             Postaction(rows) => rows.write_to(writer)?,
             Execute(rows) => rows.write_to(writer)?,
@@ -706,9 +711,10 @@ impl<'a> Package<'a> {
         writer.write_all(b"name ")?;
         writer.write_all(self.name.as_bytes())?;
         writer.write_all(b"\n")?;
-        // print directives and the other fields
+        // print remaining directives and fields
+        let is_scheme = self.get_name().starts_with("scheme-");
         for entry_set in self.dataset.iter() {
-            entry_set.write_to(writer)?;
+            entry_set.write_to(writer, is_scheme)?;
         }
         Ok(())
     }
